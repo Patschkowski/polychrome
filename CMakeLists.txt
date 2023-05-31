@@ -5,6 +5,7 @@ project(Polychrome)
 find_package(Doxygen)
 
 add_executable(polychrome WIN32 src/main.cpp)
+target_include_directories(polychrome SYSTEM PRIVATE inc)
 target_compile_features(polychrome PRIVATE cxx_std_23)
 target_compile_definitions(polychrome PRIVATE _UNICODE UNICODE)
 target_compile_options(polychrome PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/WX /W4 /EHsc>)
