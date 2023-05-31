@@ -1,15 +1,142 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 
-static LRESULT
-WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) noexcept
+static BOOL SetupPixelFormat(HDC  hDC,
+                             BYTE cColorBits   = 24,
+                             BYTE cAlphaBits   = 8,
+                             BYTE cAccumBits   = 24,
+                             BYTE cDepthBits   = 16,
+                             BYTE cStencilBits = 8) noexcept
+{
+  PIXELFORMATDESCRIPTOR pfd{.nSize    = sizeof(PIXELFORMATDESCRIPTOR),
+                            .nVersion = 1,
+                            .dwFlags  = PFD_SUPPORT_OPENGL | PFD_DRAW_TO_WINDOW
+                                       | PFD_DOUBLEBUFFER,
+                            .iPixelType      = PFD_TYPE_RGBA,
+                            .cColorBits      = cColorBits,
+                            .cRedBits        = 0,
+                            .cRedShift       = 0,
+                            .cGreenBits      = 0,
+                            .cGreenShift     = 0,
+                            .cBlueBits       = 0,
+                            .cBlueShift      = 0,
+                            .cAlphaBits      = cAlphaBits,
+                            .cAlphaShift     = 0,
+                            .cAccumBits      = cAccumBits,
+                            .cAccumRedBits   = 0,
+                            .cAccumGreenBits = 0,
+                            .cAccumBlueBits  = 0,
+                            .cAccumAlphaBits = 0,
+                            .cDepthBits      = cDepthBits,
+                            .cStencilBits    = cStencilBits,
+                            .cAuxBuffers     = 0,
+                            .iLayerType      = PFD_MAIN_PLANE,
+                            .bReserved       = 0,
+                            .dwLayerMask     = 0,
+                            .dwVisibleMask   = 0,
+                            .dwDamageMask    = 0};
+  int                   format{0};
+
+  format = ChoosePixelFormat(hDC, &pfd);
+
+  return 0 != format && 0 != DescribePixelFormat(hDC, format, sizeof pfd, &pfd)
+         && SetPixelFormat(hDC, format, &pfd);
+}
+
+static HGLRC CreateContext(HDC hDC) noexcept
+{
+  HGLRC hGLRC{NULL};
+
+  hGLRC = wglCreateContext(hDC);
+
+  return hGLRC;
+}
+
+static LRESULT CALLBACK WndProc(HWND   hWnd,
+                                UINT   uMsg,
+                                WPARAM wParam,
+                                LPARAM lParam) noexcept
 {
   LRESULT lRes{0};
+  HDC     hDC{NULL};
+  HGLRC   hGLRC{NULL};
+  DWORD   dwLastError{ERROR_SUCCESS};
 
   switch (uMsg) {
+  case WM_CREATE:
+    lRes = -1; // Indicates failure and window creation aborts.
+
+    hDC = GetDC(hWnd);
+    if (!hDC || !SetupPixelFormat(hDC)) {
+      dwLastError = GetLastError();
+      break;
+    }
+
+    hGLRC = CreateContext(hDC);
+    if (!hGLRC) {
+      dwLastError = GetLastError();
+      goto release_dc;
+    }
+
+    if (!wglMakeCurrent(hDC, hGLRC)) {
+      dwLastError = GetLastError();
+      goto delete_context;
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    if (0 == SetWindowLongPtrW(hWnd, 0, reinterpret_cast<LONG_PTR>(hDC))) {
+      dwLastError = GetLastError();
+      if (dwLastError != ERROR_SUCCESS) {
+        goto make_no_longer_current;
+      }
+    }
+
+    SetLastError(ERROR_SUCCESS);
+    if (0
+        == SetWindowLongPtrW(hWnd,
+                             sizeof(HDC),
+                             reinterpret_cast<LONG_PTR>(hGLRC))) {
+      dwLastError = GetLastError();
+      if (dwLastError != ERROR_SUCCESS) {
+        goto make_no_longer_current;
+      }
+    }
+
+    *reinterpret_cast<HDC*>(
+      reinterpret_cast<LPCREATESTRUCTW>(lParam)->lpCreateParams) = hDC;
+    lRes                                                         = 0;
+    break;
+
+  case WM_DESTROY:
+    hDC   = reinterpret_cast<HDC>(GetWindowLongPtrW(hWnd, 0));
+    hGLRC = reinterpret_cast<HGLRC>(GetWindowLongPtrW(hWnd, sizeof(HDC)));
+
+  make_no_longer_current:
+    if (!wglMakeCurrent(NULL, NULL)) {
+      dwLastError = GetLastError();
+    }
+
+  delete_context:
+    if (hGLRC) {
+      if (!wglDeleteContext(hGLRC)) {
+        dwLastError = GetLastError();
+      }
+      hGLRC = NULL;
+    }
+
+  release_dc:
+    if (hDC) {
+      if (!ReleaseDC(hWnd, hDC)) {
+        dwLastError = GetLastError();
+      }
+      hDC = NULL;
+    }
+    break;
+
   case WM_CLOSE:
     PostQuitMessage(0);
     break;
+
   default:
     lRes = DefWindowProcW(hWnd, uMsg, wParam, lParam);
     break;
@@ -29,7 +156,7 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
                         .style         = CS_OWNDC,
                         .lpfnWndProc   = &WndProc,
                         .cbClsExtra    = 0,
-                        .cbWndExtra    = 0,
+                        .cbWndExtra    = sizeof(HDC) + sizeof(HGLRC),
                         .hInstance     = hInstance,
                         .hIcon         = NULL,
                         .hCursor       = NULL,
@@ -40,6 +167,7 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
   auto              atom{INVALID_ATOM};
   HWND              hWnd{NULL};
   auto              bRuns{true};
+  HDC               hDC{NULL};
 
   atom = RegisterClassExW(&wcx);
   if (INVALID_ATOM == atom) {
@@ -58,7 +186,7 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
                          NULL,
                          NULL,
                          hInstance,
-                         NULL);
+                         &hDC);
   if (NULL == hWnd) {
     dwLastError = GetLastError();
     goto unregister_class;
@@ -72,19 +200,28 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
       TranslateMessage(&msg);
       DispatchMessageW(&msg);
 
-      if (msg.message == WM_QUIT) {
+      if (WM_QUIT == msg.message) {
         bRuns     = false;
         nExitCode = static_cast<int>(msg.wParam);
       }
     }
+
+    if (FALSE == SwapBuffers(hDC)) {
+      dwLastError = GetLastError();
+      goto destroy_window;
+    }
   }
 
-  // destroy_window:
-  DestroyWindow(hWnd);
+destroy_window:
+  if (FALSE == DestroyWindow(hWnd)) {
+    dwLastError = GetLastError();
+  }
   hWnd = NULL;
 
 unregister_class:
-  UnregisterClassW(MAKEINTATOM(atom), hInstance);
+  if (FALSE == UnregisterClassW(MAKEINTATOM(atom), hInstance)) {
+    dwLastError = GetLastError();
+  }
   atom = INVALID_ATOM;
 
 end:
