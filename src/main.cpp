@@ -9,35 +9,39 @@
 #include <GL/wglext.h>
 
 #ifdef WGL_ARB_extensions_string
-static PFNWGLGETEXTENSIONSSTRINGARBPROC pfnwglGetExtensionsStringARB = NULL;
+static PFNWGLGETEXTENSIONSSTRINGARBPROC pfnwglGetExtensionsStringARB{NULL};
 #endif
 
 #ifdef WGL_ARB_pixel_format
-static BOOL                           hasWGL_ARB_pixel_format    = FALSE;
-static PFNWGLCHOOSEPIXELFORMATARBPROC pfnwglChoosePixelFormatARB = NULL;
+static BOOL                           hasWGL_ARB_pixel_format{FALSE};
+static PFNWGLCHOOSEPIXELFORMATARBPROC pfnwglChoosePixelFormatARB{NULL};
 #endif
 
 #ifdef WGL_ARB_multisample
-static BOOL hasWGL_ARB_multisample = FALSE;
+static BOOL hasWGL_ARB_multisample{FALSE};
 #endif
 
 #ifdef WGL_ARB_create_context
-static BOOL                              hasWGL_ARB_create_context     = FALSE;
-static PFNWGLCREATECONTEXTATTRIBSARBPROC pfnwglCreateContextAttribsARB = NULL;
+static BOOL                              hasWGL_ARB_create_context{FALSE};
+static PFNWGLCREATECONTEXTATTRIBSARBPROC pfnwglCreateContextAttribsARB{NULL};
 #endif
 
 #ifdef WGL_ARB_create_context_profile
-static BOOL hasWGL_ARB_create_context_profile = FALSE;
+static BOOL hasWGL_ARB_create_context_profile{FALSE};
 #endif
 
 #ifdef WGL_EXT_swap_control
-static BOOL                      hasWGL_EXT_swap_control = FALSE;
-static PFNWGLSWAPINTERVALEXTPROC pfnwglSwapIntervalEXT   = NULL;
+static BOOL                      hasWGL_EXT_swap_control{FALSE};
+static PFNWGLSWAPINTERVALEXTPROC pfnwglSwapIntervalEXT{NULL};
 #endif
 
 #ifdef WGL_EXT_swap_control_tear
-static BOOL hasWGL_EXT_swap_control_tear = FALSE;
+static BOOL hasWGL_EXT_swap_control_tear{FALSE};
 #endif
+
+static PFNGLCLEARCOLORPROC glClearColor{NULL};
+static PFNGLCLEARPROC      glClear{NULL};
+static PFNGLGETSTRINGIPROC glGetStringi{NULL};
 
 static BOOL HasExtension(const char*       extensionsString,
                          const char* const extension) noexcept
@@ -64,6 +68,7 @@ static BOOL LoadWglExtensions(HINSTANCE hInstance, LPCWSTR lpClassName) noexcept
   DWORD       dwErrCode{ERROR_SUCCESS};
   const char* extensionsString{nullptr};
   HMODULE     hOpengl32{NULL};
+  BOOL        bRet{FALSE};
 
   hWnd = CreateWindowExW(WS_EX_APPWINDOW | WS_EX_OVERLAPPEDWINDOW,
                          lpClassName,
@@ -79,7 +84,7 @@ static BOOL LoadWglExtensions(HINSTANCE hInstance, LPCWSTR lpClassName) noexcept
                          &hDC);
   if (!hWnd) {
     dwErrCode = GetLastError();
-    goto err;
+    goto end;
   }
 
 #define GPA(fn) \
@@ -102,7 +107,7 @@ static BOOL LoadWglExtensions(HINSTANCE hInstance, LPCWSTR lpClassName) noexcept
   }
   else {
     dwErrCode = GetLastError();
-    goto err;
+    goto destroy_window;
   }
 #endif
 
@@ -147,17 +152,48 @@ static BOOL LoadWglExtensions(HINSTANCE hInstance, LPCWSTR lpClassName) noexcept
 
 #undef GPA
 
+  bRet = TRUE;
+
+destroy_window:
   if (!DestroyWindow(hWnd)) {
-    dwErrCode = GetLastError();
-    goto err;
+    bRet = FALSE;
   }
   hWnd = NULL;
 
-  return TRUE;
+end:
+  if (ERROR_SUCCESS != dwErrCode) {
+    SetLastError(dwErrCode);
+  }
 
-err:
-  SetLastError(dwErrCode);
-  return FALSE;
+  return bRet;
+}
+
+static BOOL LoadGl() noexcept
+{
+  HMODULE hOpengl32{NULL};
+
+  if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                          L"opengl32",
+                          &hOpengl32)) {
+    return FALSE;
+  }
+  else {
+#define GPA(fn) \
+  fn = reinterpret_cast<decltype(fn)>(GetProcAddress(hOpengl32, #fn))
+
+    GPA(glClearColor);
+    GPA(glClear);
+
+#undef GPA
+
+#define GPA(fn) fn = reinterpret_cast<decltype(fn)>(wglGetProcAddress(#fn))
+
+    GPA(glGetStringi);
+
+#undef GPA
+
+    return TRUE;
+  }
 }
 
 static BOOL SetupPixelFormat(HDC  hDC,
@@ -200,33 +236,33 @@ static BOOL SetupPixelFormat(HDC  hDC,
   auto                  format{0};
 
 #ifdef WGL_ARB_pixel_format
-  int  iAttribIList[] = {WGL_SUPPORT_OPENGL_ARB,
-                         TRUE,
-                         WGL_DRAW_TO_WINDOW_ARB,
-                         TRUE,
-                         WGL_DOUBLE_BUFFER_ARB,
-                         TRUE,
-                         WGL_PIXEL_TYPE_ARB,
-                         WGL_TYPE_RGBA_ARB,
-                         WGL_COLOR_BITS_ARB,
-                         cColorBits,
-                         WGL_ALPHA_BITS_ARB,
-                         cAlphaBits,
-                         WGL_ACCUM_BITS_ARB,
-                         cAccumBits,
-                         WGL_DEPTH_BITS_ARB,
-                         cDepthBits,
-                         WGL_STENCIL_BITS_ARB,
-                         cStencilBits,
-                         WGL_AUX_BUFFERS_ARB,
-                         cAuxBuffers,
-                         0,
-                         0,
-                         0,
-                         0,
-                         0};
+  int  iAttribIList[]{WGL_SUPPORT_OPENGL_ARB,
+                      TRUE,
+                      WGL_DRAW_TO_WINDOW_ARB,
+                      TRUE,
+                      WGL_DOUBLE_BUFFER_ARB,
+                      TRUE,
+                      WGL_PIXEL_TYPE_ARB,
+                      WGL_TYPE_RGBA_ARB,
+                      WGL_COLOR_BITS_ARB,
+                      cColorBits,
+                      WGL_ALPHA_BITS_ARB,
+                      cAlphaBits,
+                      WGL_ACCUM_BITS_ARB,
+                      cAccumBits,
+                      WGL_DEPTH_BITS_ARB,
+                      cDepthBits,
+                      WGL_STENCIL_BITS_ARB,
+                      cStencilBits,
+                      WGL_AUX_BUFFERS_ARB,
+                      cAuxBuffers,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0};
   int  iFormats[8]{};
-  UINT nNumFormats = 0;
+  UINT nNumFormats{0};
 
   if (hasWGL_ARB_pixel_format) {
 #ifdef WGL_ARB_multisample
@@ -261,7 +297,6 @@ static BOOL SetupPixelFormat(HDC  hDC,
 static HGLRC CreateContext(HDC hDC, HGLRC hShareContext = NULL) noexcept
 {
   HGLRC hRC{NULL};
-  DWORD dwErrCode{ERROR_SUCCESS};
 
 #ifdef WGL_ARB_create_context
   if (hasWGL_ARB_create_context) {
@@ -304,7 +339,7 @@ static HGLRC CreateContext(HDC hDC, HGLRC hShareContext = NULL) noexcept
   {
     hRC = wglCreateContext(hDC);
     if (hRC && hShareContext && !wglShareLists(hShareContext, hRC)) {
-      dwErrCode = GetLastError();
+      const auto dwErrCode{GetLastError()};
 
       if (!wglDeleteContext(hRC)) {
         // Ignore error.
@@ -433,6 +468,7 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
   HWND              hWnd{NULL};
   auto              bRuns{true};
   HDC               hDC{NULL};
+  BOOL              bWasVisible{FALSE};
 
   atom = RegisterClassExW(&wcx);
   if (INVALID_ATOM == atom) {
@@ -457,9 +493,14 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
                          NULL,
                          hInstance,
                          &hDC);
-  if (NULL == hWnd) {
+  if (!hWnd) {
     dwErrCode = GetLastError();
     goto unregister_class;
+  }
+
+  if (!LoadGl()) {
+    dwErrCode = GetLastError();
+    goto destroy_window;
   }
 
 #ifdef WGL_EXT_swap_control
@@ -478,13 +519,15 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
   }
 #endif
 
-  ShowWindow(hWnd, nShowCmd);
+  bWasVisible = ShowWindow(hWnd, nShowCmd);
+
+  glClearColor(0.25, 0.5, 1.0, 1.0);
 
   while (bRuns) {
     MSG msg;
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-      TranslateMessage(&msg);
-      DispatchMessageW(&msg);
+      [[maybe_unused]] const auto bWasTranslated{TranslateMessage(&msg)};
+      [[maybe_unused]] const auto lRes{DispatchMessageW(&msg)};
 
       if (WM_QUIT == msg.message) {
         bRuns     = false;
@@ -492,20 +535,22 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
       }
     }
 
-    if (FALSE == SwapBuffers(hDC)) {
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (!SwapBuffers(hDC)) {
       dwErrCode = GetLastError();
       goto destroy_window;
     }
   }
 
 destroy_window:
-  if (FALSE == DestroyWindow(hWnd)) {
+  if (!DestroyWindow(hWnd)) {
     dwErrCode = GetLastError();
   }
   hWnd = NULL;
 
 unregister_class:
-  if (FALSE == UnregisterClassW(MAKEINTATOM(atom), hInstance)) {
+  if (!UnregisterClassW(MAKEINTATOM(atom), hInstance)) {
     dwErrCode = GetLastError();
   }
   atom = INVALID_ATOM;
