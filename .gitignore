@@ -33,3 +33,5 @@
 /build
 /.vs
 /out
+/CMakeSettings.json
+/*.pdb
