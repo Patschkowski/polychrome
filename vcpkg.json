@@ -1,0 +1,15 @@
+{
+  "name": "polychrome",
+  "version-string": "latest",
+  "dependencies": [
+    {
+      "name": "wil",
+      "version>=": "2023-08-24"
+    },
+    {
+      "name": "vulkan",
+      "version>=": "2023-12-17"
+    }
+  ],
+  "builtin-baseline": "6978381401d33a5ad6a3385895d12e383083712a"
+}

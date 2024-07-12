@@ -29,7 +29,7 @@ static LRESULT CALLBACK WndProc(HWND   hWnd,
                                 WPARAM wParam,
                                 LPARAM lParam) noexcept
 {
-  LRESULT lRes{0};
+  LRESULT result{0};
 
   switch (uMsg) {
   case WM_CLOSE:
@@ -37,11 +37,11 @@ static LRESULT CALLBACK WndProc(HWND   hWnd,
     break;
 
   default:
-    lRes = ::DefWindowProcW(hWnd, uMsg, wParam, lParam);
+    result = ::DefWindowProcW(hWnd, uMsg, wParam, lParam);
     break;
   }
 
-  return lRes;
+  return result;
 }
 
 int WINAPI wWinMain(HINSTANCE                  hInstance,
@@ -49,7 +49,7 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
                     [[maybe_unused]] LPWSTR    lpCmdLine,
                     int                        nShowCmd)
 {
-  renderer renderer;
+  renderer                renderer;
   const WNDCLASSEXW       wcx{.cbSize        = sizeof(WNDCLASSEXW),
                               .style         = CS_OWNDC,
                               .lpfnWndProc   = &WndProc,
@@ -87,8 +87,8 @@ int WINAPI wWinMain(HINSTANCE                  hInstance,
   while (is_running) {
     MSG msg;
     while (::PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
-      [[maybe_unused]] const auto bWasTranslated{::TranslateMessage(&msg)};
-      [[maybe_unused]] const auto lRes{::DispatchMessageW(&msg)};
+      [[maybe_unused]] const auto was_translated{::TranslateMessage(&msg)};
+      [[maybe_unused]] const auto result{::DispatchMessageW(&msg)};
 
       if (WM_QUIT == msg.message) {
         is_running = false;

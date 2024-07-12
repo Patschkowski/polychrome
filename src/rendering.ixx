@@ -12,7 +12,8 @@ public:
   void draw(){};
 
 private:
-  vk::raii::Context  context_;
-  vk::raii::Instance instance_{nullptr};
-  vk::raii::Device   device_{nullptr};
+  vk::raii::Context    context_;
+  vk::raii::Instance   instance_{nullptr};
+  vk::raii::SurfaceKHR surface_{nullptr};
+  vk::raii::Device     device_{nullptr};
 };

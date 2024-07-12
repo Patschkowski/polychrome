@@ -1,0 +1,53 @@
+{
+  "version": 5,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23
+  },
+  "configurePresets": [
+    {
+      "name": "x64-debug",
+      "vendor": { "microsoft.com/VisualStudioSettings/CMake/1.0": { "enableMicrosoftCodeAnalysis": true, "disableExternalAnalysis": true } },
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "toolchainFile": "$env{CMAKE_TOOLCHAIN_FILE}",
+      "binaryDir": "${sourceDir}/build_msvc/${presetName}",
+      "environment": {
+        "esp.extensions": "cppcorecheck.dll"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS": "/WX /W4 /EHsc /DEBUG"
+      }
+    },
+    {
+      "name": "x64-release",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "x64",
+        "strategy": "set"
+      },
+      "toolchainFile": "$env{CMAKE_TOOLCHAIN_FILE}",
+      "binaryDir": "${sourceDir}/build_msvc/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS": "/WX /W4 /EHsc"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "x64-debug",
+      "configurePreset": "x64-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "x64-release",
+      "configurePreset": "x64-release",
+      "configuration": "Release"
+    }
+  ]
+}
